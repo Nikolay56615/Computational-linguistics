@@ -33,9 +33,18 @@ if arc and arc.get("id"):
     ok = repo.delete_arc_by_id(arc["id"])
     print("Arc deleted:", ok)
 
-ok = repo.delete_node_by_uri(n1["uri"])
-print("Node deleted:", ok)
-ok = repo.delete_node_by_uri(n2["uri"])
-print("Node deleted:", ok)
-
+# ok = repo.delete_node_by_uri(n1["uri"])
+# print("Node deleted:", ok)
+# ok = repo.delete_node_by_uri(n2["uri"])
+# print("Node deleted:", ok)
+print(repo.run_custom_query("MATCH (n) RETURN count(n) AS total"))
+# print(repo.run_custom_query(
+#     """
+#     MATCH (n {uri: $uri})
+#     RETURN n.title AS title, n.description AS desc
+#     """,
+#     uri = "node_abc123",
+#     limit = 5
+# ))
+print(repo.run_custom_query("MATCH (n) DETACH DELETE n"))
 repo.close()

@@ -7,6 +7,7 @@ from neo4j import GraphDatabase, basic_auth
 TNode = Dict[str, Any]
 TArc = Dict[str, Any]
 
+
 class Neo4jRepository:
     def __init__(self, uri: str, user: str, password: str, encrypted: bool = False):
         """
@@ -28,11 +29,11 @@ class Neo4jRepository:
     # Вспомогательные функции
     # -----------------------
     @staticmethod
-    def generate_random_string(length: int = 12) -> str:
+    def generate_random_string(length: int = 12, namespace_title: str = "www.ex1.com") -> str:
         """Генерация случайной строки для URI (безопасная, читаемая)"""
         # Используем uuid4 для уникальности, обрезаем и делаем безопасную строку
         uid = uuid.uuid4().hex[:length]
-        return f"node_{uid}"
+        return f"http://{namespace_title}/{uid}"
 
     @staticmethod
     def transform_labels(labels: List[str], separator: str = ':') -> str:
@@ -219,7 +220,8 @@ class Neo4jRepository:
             if not rec:
                 return None
             node = rec["n"]
-            props = dict(node.items()); props["id"] = int(node.id)
+            props = dict(node.items());
+            props["id"] = int(node.id)
             return self.collect_node(props)
 
     def update_node(self, uri: str, props: Dict[str, Any]) -> Optional[TNode]:
@@ -227,7 +229,7 @@ class Neo4jRepository:
         Обновляет свойства узла с указанным uri (замена/дополнение).
         Возвращает обновлённый узел.
         """
-        # формируем SET n += { ... } используя параметры
+        # Формируем SET n += { ... } используя параметры
         if not props:
             return self.get_node_by_uri(uri)
         param_map = {f"p_{k}": v for k, v in props.items()}
@@ -240,7 +242,8 @@ class Neo4jRepository:
             if not rec:
                 return None
             node = rec["n"]
-            p = dict(node.items()); p["id"] = int(node.id)
+            p = dict(node.items());
+            p["id"] = int(node.id)
             return self.collect_node(p)
 
     def delete_node_by_uri(self, uri: str) -> bool:
@@ -257,16 +260,18 @@ class Neo4jRepository:
     # -----------------------
     # CRUD: дуги (арки)
     # -----------------------
-    def create_arc(self, node1_uri: str, node2_uri: str, rel_type: str = "RELATED", props: Optional[Dict[str, Any]] = None) -> Optional[TArc]:
+    def create_arc(self, node1_uri: str, node2_uri: str, rel_type: str = "RELATED",
+                   props: Optional[Dict[str, Any]] = None) -> Optional[TArc]:
         """
         Создать арку между двумя узлами по uri (если узлы не найдены — операция завершится без создания).
         Возвращает TArc или None.
         """
         props = props or {}
         props_part = self.transform_props(props)
+        props_clause = f" {props_part}" if props_part else ""
         cypher = f"""
         MATCH (a {{`uri`: $uri1}}), (b {{`uri`: $uri2}})
-        CREATE (a)-[r:`{rel_type}` {props_part}]->(b)
+        CREATE (a)-[r:`{rel_type}`{props_clause}]->(b)
         RETURN r, a, b
         """
         with self.driver.session() as session:
@@ -276,10 +281,13 @@ class Neo4jRepository:
             rel = rec["r"]
             arc = self.collect_arc(rel)
             # попытка извлечь node uri из узлов в ответе
-            a = rec.get("a"); b = rec.get("b")
+            a = rec.get("a")
+            b = rec.get("b")
             if a and b:
-                arc["node_uri_from"] = a.get("uri") if hasattr(a, "get") else (a["uri"] if "uri" in a else None)
-                arc["node_uri_to"] = b.get("uri") if hasattr(b, "get") else (b["uri"] if "uri" in b else None)
+                arc["node_uri_from"] = a.get("uri") if hasattr(a, "get") else (
+                    a["uri"] if isinstance(a, dict) and "uri" in a else None)
+                arc["node_uri_to"] = b.get("uri") if hasattr(b, "get") else (
+                    b["uri"] if isinstance(b, dict) and "uri" in b else None)
             return arc
 
     def delete_arc_by_id(self, arc_id: int) -> bool:
@@ -307,4 +315,3 @@ class Neo4jRepository:
                 # преобразуем Record в dict
                 out.append({k: (v if not hasattr(v, "items") else dict(v.items())) for k, v in dict(r).items()})
             return out
-
