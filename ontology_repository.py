@@ -363,17 +363,11 @@ class OntologyRepository(Neo4jRepository):
         self._apply_object_properties(obj["uri"], signature.get("obj_params", []), object_properties)
         return obj
 
-    def update_object(
-            self,
-            object_uri: str,
-            title: str,
-            description: str,
-            properties: Optional[Dict[str, Any]] = None,
-            object_properties: Optional[Dict[str, Any]] = None,
-    ) -> Optional[TNode]:
+    def update_object(self, object_uri: str, title: str, description: str, properties: Optional[Dict[str, Any]] = None,
+            object_properties: Optional[Dict[str, Any]] = None) -> Optional[TNode]:
         """
-    Обновить объект класса с datatype и object свойствами.
-    """
+        Обновить объект класса с datatype и object свойствами.
+        """
         obj = self.get_object(object_uri)
         if not obj:
             return None
@@ -404,12 +398,15 @@ class OntologyRepository(Neo4jRepository):
     # -----------------------
     def collect_signature(self, class_uri: str) -> Dict[str, Any]:
         """
-        Collect class signature (DatatypeProperty and ObjectProperty), including parents.
-        Returns:
+        Сбор сигнатуры класса: все DatatypeProperty и ObjectProperty включая родителей.
+        Возвращает словарь:
         {
           params: [{title, uri}, ...],
           obj_params: [{title, uri, target_class_uri, relation_direction}, ...]
         }
+        relation_direction:
+          1  — класс <-[DOMAIN]- ObjectProperty
+         -1  — ObjectProperty -[RANGE]-> класс
         """
         cypher = """
         MATCH (c:Class {uri: $uri})
