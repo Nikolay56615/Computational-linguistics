@@ -6,6 +6,8 @@ NEO4J_PASSWORD = "qy?u6E89H2"
 
 repo = OntologyRepository(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
 
+repo.run_custom_query("MATCH (n) DETACH DELETE n")
+
 # 1) Корневой класс
 cls_person = repo.create_class("Person", "Человек")
 print("Создан корневой класс:", cls_person)
@@ -27,7 +29,7 @@ op_employee_works_for = repo.add_class_object_attribute(
 print("Добавлен ObjectProperty к Employee:", op_employee_works_for)
 
 # 4) Объект класса Employee
-obj_employee_1 = repo.create_object(cls_employee["uri"], "Дубина Дубно", "Разработчик")
+obj_employee_1 = repo.create_object(cls_employee["uri"], "Челик Чел", "Разработчик")
 print("Создан объект Employee:", obj_employee_1)
 
 # 5) Сигнатуры классов
@@ -66,7 +68,7 @@ op_programmer_works_for = repo.add_class_object_attribute(
 print("Добавлен ObjectProperty к Programmer:", op_programmer_works_for)
 
 # 10) Объект класса Programmer
-obj_programmer_1 = repo.create_object(cls_programmer["uri"], "Димбель Рацель", "Разработчик")
+obj_programmer_1 = repo.create_object(cls_programmer["uri"], "Прогер Прогерович", "Разработчик")
 print("Создан объект Programmer:", obj_programmer_1)
 
 # 11) Проверка методов онтологии
