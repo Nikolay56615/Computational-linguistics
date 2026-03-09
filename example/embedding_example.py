@@ -1,6 +1,10 @@
 from datetime import datetime
 from embedding_repository import EmbeddingRepository
 
+
+def print_section(title: str) -> None:
+    print(f"\n=== {title} ===\n")
+
 repo = EmbeddingRepository()
 
 started_at = datetime.now().isoformat(timespec="seconds")
@@ -33,20 +37,27 @@ sample_text = """
 Нептун известен очень сильными ветрами в атмосфере, а Уран вращается почти «лёжа на боку» по сравнению с другими планетами.
 """
 
-print("=== 1. Разбиение текста на чанки ===\n")
-chunks = repo.get_chunks(sample_text, chunk_size=220, overlap=40)
+print_section("1. Разбиение текста на чанки")
+
+chunks = repo.get_chunks(
+    sample_text,
+    chunk_size=220,
+    overlap=0,
+    split_by="paragraph",
+)
 
 print(f"Получено {len(chunks)} фрагментов:\n")
 for i, chunk in enumerate(chunks):
-    preview = chunk[:120] + "..." if len(chunk) > 120 else chunk
-    print(f"[{i}] {preview}")
+    print(f"[{i}] {chunk}")
 
-print("\n=== 2. Генерация эмбеддингов ===\n")
+print_section("2. Генерация эмбеддингов")
+
 embeddings = repo.get_embeddings(chunks)
 print(f"Форма массива эмбеддингов: {embeddings.shape}")
 print(f"Тип данных: {embeddings.dtype}")
 
-print("\n=== 3. Сравнение двух текстов ===\n")
+print_section("3. Сравнение двух текстов")
+
 text1 = "Юпитер является самой большой планетой"
 text2 = "Крупнейшая планета Солнечной системы — Юпитер"
 text3 = "Яблоки и груши растут в саду"
@@ -61,24 +72,32 @@ print(f"text3: {text3}\n")
 print(f"Сходство text1 и text2: {sim_12:.4f}")
 print(f"Сходство text1 и text3: {sim_13:.4f}")
 
-print("\n=== 4. Поиск самых похожих чанков ===\n")
+print_section("4. Поиск самых похожих чанков")
+
 queries = [
     "Какая планета самая горячая?",
     "Где есть кольца?",
     "Какая планета самая большая?",
     "На какой планете есть жизнь?",
-    "Что известно про Марс?"
+    "Что известно про Марс?",
 ]
 
 for query in queries:
-    print(f"\nЗапрос: {query}")
-    scores = repo.batch_compare(query, chunks)
+    print(f"Запрос: {query}")
 
-    ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
+    top_chunks = repo.find_relevant_chunks(query, chunks, top_k=3)
+    if not top_chunks:
+        print("  Ничего не найдено.")
+        continue
 
-    for idx, score in ranked[:3]:
-        preview = chunks[idx][:100] + "..." if len(chunks[idx]) > 100 else chunks[idx]
-        print(f"  [{idx}] sim={score:.4f}: {preview}")
+    for item in top_chunks:
+        idx = item["index"]
+        score = item["similarity"]
+        chunk = item["chunk"]
+
+        print(f"  [{idx}] sim={score:.4f}: {chunk}")
+
+    print()
 
 finished_at = datetime.now().isoformat(timespec="seconds")
-print(f"\nFinished at: {finished_at}")
+print(f"Finished at: {finished_at}")
