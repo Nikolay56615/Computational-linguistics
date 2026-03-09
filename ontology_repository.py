@@ -1,4 +1,3 @@
-# ontology_repository.py
 from typing import List, Dict, Any, Optional
 from neo4j_repository import Neo4jRepository, TNode
 
