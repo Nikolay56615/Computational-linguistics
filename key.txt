@@ -1,0 +1,9 @@
+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
+
+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
+
+
+$env:RAG_API_URL='https://openrouter.ai/api/v1/chat/completions'
+$env:RAG_API_KEY='НОВЫЙ_КЛЮЧ_СЮДА'
+$env:RAG_API_MODEL='qwen/qwen3-next-80b-a3b-instruct:free'
+C:\Users\Vladimir\venv\Scripts\python.exe C:\Users\Vladimir\PycharmProjects\linguistic\example\rag_graph_example.py
