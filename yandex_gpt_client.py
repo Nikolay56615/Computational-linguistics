@@ -34,6 +34,14 @@ class YandexGPTClient:
 
     def generate(self, question: str, contexts: Sequence[str]) -> LLMResult:
         prompt = build_prompt(question, contexts)
+        return self.generate_prompt(prompt, fallback_question=question, fallback_contexts=contexts)
+
+    def generate_prompt(
+        self,
+        prompt: str,
+        fallback_question: str = "",
+        fallback_contexts: Sequence[str] = (),
+    ) -> LLMResult:
         try:
             response = requests.post(
                 "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
@@ -62,10 +70,10 @@ class YandexGPTClient:
             )
             response.raise_for_status()
             data = response.json()
-            answer = self._extract_answer(data) or build_extractive_answer(question, contexts)
+            answer = self._extract_answer(data) or build_extractive_answer(fallback_question, fallback_contexts)
             return LLMResult(answer=answer, prompt=prompt, used_api=True, mode="yandex-api")
         except Exception as exc:
-            fallback = build_extractive_answer(question, contexts)
+            fallback = build_extractive_answer(fallback_question, fallback_contexts)
             if not fallback:
                 fallback = f"YandexGPT API недоступен ({exc.__class__.__name__}: {exc})."
             return LLMResult(

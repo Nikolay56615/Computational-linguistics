@@ -11,6 +11,15 @@ from rag_graph import RagPipeline, build_index
 
 
 def create_pipeline(index):
+    if os.getenv("OPENROUTER_API_KEY") or (
+        os.getenv("RAG_API_URL", "").rstrip("/") == "https://openrouter.ai/api/v1/chat/completions"
+        and os.getenv("RAG_API_KEY")
+    ):
+        from openrouter_llm_client import OpenRouterLLMClient
+
+        print("Генерация: OpenRouter API")
+        return RagPipeline(index, llm=OpenRouterLLMClient())
+
     if os.getenv("YANDEX_FOLDER_ID") and (os.getenv("YANDEX_API_KEY") or os.getenv("YANDEX_IAM_TOKEN")):
         from yandex_gpt_client import YandexGPTClient
 
@@ -25,7 +34,7 @@ def create_pipeline(index):
         print(f"Генерация: OpenAI API ({model})")
         return RagPipeline(index, llm=OpenAILLMClient(model=model))
 
-    print("Генерация: встроенный клиент RAG_API/local Qwen/fallback")
+    print("Генерация: встроенный клиент RAG_API/fallback")
     return RagPipeline(index)
 
 
@@ -66,7 +75,7 @@ def main():
     print(result.final_answer)
 
     if result.generation_mode == "fallback":
-        print("\nНи API, ни локальная модель не дали качественный ответ, поэтому ниже показан финальный промпт:")
+        print("\nAPI не дал качественный ответ, поэтому ниже показан финальный промпт:")
         print(result.final_prompt)
 
 

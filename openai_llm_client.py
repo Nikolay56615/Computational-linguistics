@@ -25,6 +25,14 @@ class OpenAILLMClient:
 
     def generate(self, question: str, contexts: Sequence[str]) -> LLMResult:
         prompt = build_prompt(question, contexts)
+        return self.generate_prompt(prompt, fallback_question=question, fallback_contexts=contexts)
+
+    def generate_prompt(
+        self,
+        prompt: str,
+        fallback_question: str = "",
+        fallback_contexts: Sequence[str] = (),
+    ) -> LLMResult:
         try:
             response = self.client.responses.create(
                 model=self.model,
@@ -39,7 +47,7 @@ class OpenAILLMClient:
             )
             answer = (response.output_text or "").strip()
             if not answer:
-                answer = build_extractive_answer(question, contexts)
+                answer = build_extractive_answer(fallback_question, fallback_contexts)
 
             return LLMResult(
                 answer=answer,
@@ -48,7 +56,7 @@ class OpenAILLMClient:
                 mode="openai-api",
             )
         except Exception as exc:
-            fallback = build_extractive_answer(question, contexts)
+            fallback = build_extractive_answer(fallback_question, fallback_contexts)
             if not fallback:
                 fallback = f"OpenAI API недоступен ({exc.__class__.__name__}: {exc})."
 

@@ -468,7 +468,8 @@ def build_prompt(question: str, contexts: Sequence[str]) -> str:
     context_text = "\n\n".join(f"[{idx + 1}]\n{text}" for idx, text in enumerate(contexts))
     return (
         "Дай ответ на данный вопрос, используя информацию из текста. "
-        "Если в тексте недостаточно данных, укажи это явно.\n\n"
+        "Если в тексте недостаточно данных, укажи это явно. "
+        "Не добавляй единицы измерения к числовым значениям, если единица не указана рядом с этим значением в тексте.\n\n"
         f"Вопрос: {question}\n\n"
         f"Текст:\n{context_text}\n\n"
         "Ответ:"
@@ -476,32 +477,28 @@ def build_prompt(question: str, contexts: Sequence[str]) -> str:
 
 
 class LLMClient:
-    _local_model = None
-    _local_tokenizer = None
-    _local_model_name = None
-
     def __init__(
         self,
         api_url: Optional[str] = None,
         api_key: Optional[str] = None,
         model: Optional[str] = None,
-        local_model: Optional[str] = None,
-        use_local_llm: Optional[bool] = None,
         timeout: int = 60,
     ) -> None:
         self.api_url = api_url or os.getenv("RAG_API_URL")
         self.api_key = api_key or os.getenv("RAG_API_KEY")
         self.model = model or os.getenv("RAG_API_MODEL", "gpt-4o-mini")
-        self.local_model = local_model or os.getenv("RAG_LOCAL_MODEL", "Qwen/Qwen2.5-1.5B-Instruct")
-        if use_local_llm is None:
-            use_local_llm = os.getenv("RAG_USE_LOCAL_LLM", "1").lower() not in {"0", "false", "no"}
-        self.use_local_llm = use_local_llm
-        self.max_new_tokens = int(os.getenv("RAG_MAX_NEW_TOKENS", "140"))
         self.timeout = timeout
 
     def generate(self, question: str, contexts: Sequence[str]) -> LLMResult:
         prompt = build_prompt(question, contexts)
+        return self.generate_prompt(prompt, fallback_question=question, fallback_contexts=contexts)
 
+    def generate_prompt(
+        self,
+        prompt: str,
+        fallback_question: str = "",
+        fallback_contexts: Sequence[str] = (),
+    ) -> LLMResult:
         if self.api_url and self.api_key:
             try:
                 import requests
@@ -531,104 +528,21 @@ class LLMClient:
                 return LLMResult(answer=answer, prompt=prompt, used_api=True, mode="api")
             except Exception as exc:
                 return LLMResult(
-                    answer=f"API генерации недоступен ({exc.__class__.__name__}: {exc}).\n\n{self._fallback_answer(question, contexts)}",
-                    prompt=prompt,
-                    used_api=False,
-                    mode="fallback",
-                )
-
-        if self.use_local_llm:
-            try:
-                return LLMResult(
-                    answer=self._generate_local(prompt),
-                    prompt=prompt,
-                    used_api=False,
-                    mode="local",
-                )
-            except Exception as exc:
-                fallback = self._fallback_answer(question, contexts)
-                return LLMResult(
-                    answer=f"Локальная модель генерации недоступна ({exc.__class__.__name__}: {exc}).\n\n{fallback}",
+                    answer=(
+                        f"API генерации недоступен ({exc.__class__.__name__}: {exc}).\n\n"
+                        f"{self._fallback_answer(fallback_question, fallback_contexts)}"
+                    ),
                     prompt=prompt,
                     used_api=False,
                     mode="fallback",
                 )
 
         return LLMResult(
-            answer=self._fallback_answer(question, contexts),
+            answer=self._fallback_answer(fallback_question, fallback_contexts),
             prompt=prompt,
             used_api=False,
             mode="fallback",
         )
-
-    def _generate_local(self, prompt: str) -> str:
-        tokenizer, model = self._get_local_model()
-        if tokenizer.pad_token_id is None:
-            tokenizer.pad_token = tokenizer.eos_token
-
-        max_positions = getattr(model.config, "max_position_embeddings", None) or tokenizer.model_max_length
-        if max_positions is None or max_positions > 100000:
-            max_positions = 1024
-        input_limit = max(64, int(max_positions) - self.max_new_tokens - 8)
-
-        model_prompt = self._format_local_prompt(tokenizer, prompt)
-        inputs = tokenizer(
-            model_prompt,
-            return_tensors="pt",
-            truncation=True,
-            max_length=input_limit,
-        )
-        input_length = inputs["input_ids"].shape[1]
-
-        output_ids = model.generate(
-            **inputs,
-            max_new_tokens=self.max_new_tokens,
-            temperature=0.2,
-            do_sample=True,
-            repetition_penalty=1.1,
-            pad_token_id=tokenizer.eos_token_id,
-        )
-        new_tokens = output_ids[0][input_length:]
-        answer = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
-        if is_low_quality_generation(answer):
-            raise ValueError("local model produced low-quality text")
-        return answer or "Локальная модель вернула пустой ответ."
-
-    @staticmethod
-    def _format_local_prompt(tokenizer, prompt: str) -> str:
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "Ты отвечаешь на русском языке. "
-                    "Используй только предоставленный контекст. "
-                    "Если данных недостаточно, прямо напиши, что данных недостаточно. "
-                    "Не выдумывай факты."
-                ),
-            },
-            {"role": "user", "content": prompt},
-        ]
-        try:
-            return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        except Exception:
-            return prompt
-
-    def _get_local_model(self):
-        if (
-            LLMClient._local_model is not None
-            and LLMClient._local_tokenizer is not None
-            and LLMClient._local_model_name == self.local_model
-        ):
-            return LLMClient._local_tokenizer, LLMClient._local_model
-
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-
-        tokenizer = AutoTokenizer.from_pretrained(self.local_model)
-        model = AutoModelForCausalLM.from_pretrained(self.local_model)
-        LLMClient._local_tokenizer = tokenizer
-        LLMClient._local_model = model
-        LLMClient._local_model_name = self.local_model
-        return tokenizer, model
 
     @staticmethod
     def _extract_api_answer(data: Dict[str, Any]) -> str:
@@ -680,6 +594,12 @@ def is_low_quality_generation(answer: str) -> bool:
 
     words = re.findall(r"[A-Za-zА-Яа-яЁё]{3,}", answer)
     if len(words) < 4:
+        return True
+
+    prompt_echo_markers = ("[Сущность", "[Фрагмент", "Тип узла:", "Источник разметки:")
+    if any(marker in answer for marker in prompt_echo_markers):
+        return True
+    if answer.count("Название:") >= 2:
         return True
 
     repeated = re.search(r"(.{1,8})\1{8,}", answer)
